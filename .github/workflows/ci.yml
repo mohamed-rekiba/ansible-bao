@@ -61,5 +61,5 @@ jobs:
         run: uv pip install --system "hvac>=2.4.0"
 
       - name: Run sanity tests
-        run: ansible-test sanity --local -v --color
+        run: ansible-test sanity --local --requirements -v --color
         working-directory: ansible_collections/mrekiba/bao
