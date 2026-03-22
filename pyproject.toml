@@ -3,7 +3,7 @@ name = "mrekiba-bao"
 version = "1.0.0" # x-release-please-version
 description = "Ansible collection for managing OpenBao via the HTTP API"
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
 requires-python = ">=3.12"
 authors = [{ name = "Mohamed Rekiba" }]
 dependencies = [
@@ -20,6 +20,9 @@ dev = [
 [project.urls]
 Repository = "https://github.com/mohamed-rekiba/ansible-bao"
 Issues = "https://github.com/mohamed-rekiba/ansible-bao/issues"
+
+[tool.setuptools]
+py-modules = []
 
 [tool.ruff]
 target-version = "py312"
