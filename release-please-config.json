@@ -1,0 +1,17 @@
+{
+  "packages": {
+    ".": {
+      "release-type": "simple",
+      "extra-files": [
+        {
+          "type": "generic",
+          "path": "galaxy.yml"
+        },
+        {
+          "type": "generic",
+          "path": "pyproject.toml"
+        }
+      ]
+    }
+  }
+}

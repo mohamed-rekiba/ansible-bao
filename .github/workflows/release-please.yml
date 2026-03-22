@@ -18,11 +18,6 @@ jobs:
     steps:
       - uses: googleapis/release-please-action@v4.4.0
         id: release
-        with:
-          release-type: simple
-          extra-files: |
-            galaxy.yml
-            pyproject.toml
 
   build:
     name: Build & Upload Collection
@@ -32,9 +27,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - uses: astral-sh/setup-uv@v7.6.0
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
+
+      - uses: astral-sh/setup-uv@v7
 
       - name: Install ansible-core
         run: uv pip install --system ansible-core
