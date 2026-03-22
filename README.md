@@ -1,0 +1,228 @@
+# mrekiba.bao
+
+Ansible collection for managing [OpenBao](https://openbao.org/) through its HTTP API.
+
+Eight modules that handle the most common OpenBao operations -- namespaces, secrets engines, auth methods, policies, roles, KV v2 secrets, identity entities, and identity groups. Everything is idempotent, supports `--check` and `--diff`, and never logs sensitive data.
+
+Also works with HashiCorp Vault since the API is compatible.
+
+## Requirements
+
+- Python >= 3.12
+- [`hvac`](https://python-hvac.org/) >= 2.4.0
+- Ansible >= 2.17
+- OpenBao >= 2.0
+
+## Install
+
+Add it to your `requirements.yml`:
+
+```yaml
+collections:
+  - name: https://github.com/mohamed-rekiba/ansible-bao.git
+    type: git
+    version: main
+```
+
+Then install the collection and its Python dependency:
+
+```bash
+ansible-galaxy collection install -r requirements.yml
+pip install -r ~/.ansible/collections/ansible_collections/mrekiba/bao/meta/requirements.txt
+```
+
+Or install the tarball from the **latest** GitHub Release (stable URL; CI uploads `mrekiba-bao-latest.tar.gz` on every release):
+
+```bash
+ansible-galaxy collection install \
+  https://github.com/mohamed-rekiba/ansible-bao/releases/latest/download/mrekiba-bao-latest.tar.gz
+pip install hvac>=2.4.0
+```
+
+Each release also includes the versioned `mrekiba-bao-x.y.z.tar.gz` if you want to pin a specific build -- grab that asset’s URL from the [Releases](https://github.com/mohamed-rekiba/ansible-bao/releases) page.
+
+Or build and install locally:
+
+```bash
+ansible-galaxy collection build
+ansible-galaxy collection install mrekiba-bao-*.tar.gz
+pip install hvac>=2.4.0
+```
+
+If you use [Ansible Execution Environments](https://docs.ansible.com/automation-controller/latest/html/userguide/execution_environments.html), `ansible-builder` picks up the Python dependency automatically from `meta/execution-environment.yml`.
+
+## Modules
+
+| Module | Description |
+|--------|------------|
+| `mrekiba.bao.namespace` | Create or delete a namespace (supports nesting) |
+| `mrekiba.bao.secrets_engine` | Enable or disable a secrets engine |
+| `mrekiba.bao.auth_method` | Enable, configure, or disable an auth method |
+| `mrekiba.bao.policy` | Manage ACL policies (inline HCL or from templates) |
+| `mrekiba.bao.auth_role` | Manage roles on any auth method |
+| `mrekiba.bao.kv2_secret` | Write or delete KV v2 secrets |
+| `mrekiba.bao.identity_entity` | Manage identity entities and their aliases |
+| `mrekiba.bao.identity_group` | Manage identity groups (internal/external) and their aliases |
+
+All modules share these connection parameters:
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `bao_addr` | str | yes | -- | Server URL (e.g. `https://bao.example.com:8200`) |
+| `bao_token` | str | yes | -- | Auth token (never logged) |
+| `bao_namespace` | str | no | -- | Namespace to scope all API calls to |
+| `bao_ca_cert` | path | no | -- | CA cert for TLS verification |
+| `bao_skip_verify` | bool | no | false | Skip TLS verification |
+
+## Example
+
+A typical playbook that sets up a KV engine, an auth method, a policy, and a role:
+
+```yaml
+- name: Set up OpenBao
+  hosts: localhost
+  gather_facts: false
+  vars:
+    bao_addr: "https://bao.example.com:8200"
+    bao_token: "{{ lookup('env', 'BAO_TOKEN') }}"
+  tasks:
+    - name: Enable KV v2
+      mrekiba.bao.secrets_engine:
+        bao_addr: "{{ bao_addr }}"
+        bao_token: "{{ bao_token }}"
+        path: secret
+        type: kv
+        options:
+          version: "2"
+
+    - name: Enable AppRole auth
+      mrekiba.bao.auth_method:
+        bao_addr: "{{ bao_addr }}"
+        bao_token: "{{ bao_token }}"
+        path: approle
+        type: approle
+
+    - name: Create a read-only policy
+      mrekiba.bao.policy:
+        bao_addr: "{{ bao_addr }}"
+        bao_token: "{{ bao_token }}"
+        name: app-read
+        content: |
+          path "secret/data/myapp/*" {
+            capabilities = ["read"]
+          }
+
+    - name: Create an AppRole role
+      mrekiba.bao.auth_role:
+        bao_addr: "{{ bao_addr }}"
+        bao_token: "{{ bao_token }}"
+        auth_path: approle
+        name: my-app
+        config:
+          token_policies: app-read
+          token_ttl: 1h
+
+    - name: Write a secret
+      mrekiba.bao.kv2_secret:
+        bao_addr: "{{ bao_addr }}"
+        bao_token: "{{ bao_token }}"
+        mount: secret
+        path: myapp/config
+        data:
+          db_password: "{{ db_password }}"
+
+    - name: Create an entity with an alias
+      mrekiba.bao.identity_entity:
+        bao_addr: "{{ bao_addr }}"
+        bao_token: "{{ bao_token }}"
+        name: my-app
+        policies:
+          - app-read
+        aliases:
+          - name: my-app
+            auth_path: approle
+
+    - name: Create a group for the team
+      mrekiba.bao.identity_group:
+        bao_addr: "{{ bao_addr }}"
+        bao_token: "{{ bao_token }}"
+        name: platform-team
+        type: internal
+        policies:
+          - admin-read
+        member_entity_names:
+          - my-app
+```
+
+Policies can also come from Jinja2 templates:
+
+```yaml
+- name: Create policy from template
+  mrekiba.bao.policy:
+    bao_addr: "{{ bao_addr }}"
+    bao_token: "{{ bao_token }}"
+    name: app-read
+    content: "{{ lookup('template', 'policies/app-read.hcl.j2') }}"
+```
+
+### Namespaces
+
+Create isolated environments and scope operations to them:
+
+```yaml
+- name: Create a team namespace
+  mrekiba.bao.namespace:
+    bao_addr: "{{ bao_addr }}"
+    bao_token: "{{ bao_token }}"
+    path: team-a
+
+- name: Enable KV inside that namespace
+  mrekiba.bao.secrets_engine:
+    bao_addr: "{{ bao_addr }}"
+    bao_token: "{{ bao_token }}"
+    bao_namespace: team-a
+    path: secret
+    type: kv
+    options:
+      version: "2"
+```
+
+Every module accepts `bao_namespace` to scope API calls to a specific namespace.
+
+## How it works
+
+Every module does the same thing:
+
+1. Connect to OpenBao using `hvac`
+2. Read the current state
+3. Compare it to what you asked for
+4. Only make changes if something is different
+
+Here's what each module checks:
+
+| Module | Reads | Compares | Writes |
+|--------|-------|----------|--------|
+| `secrets_engine` | `/sys/mounts` | Mount exists with correct type | `/sys/mounts/:path` |
+| `auth_method` | `/sys/auth` | Mount + config | `/sys/auth/:path` |
+| `policy` | `/sys/policies/acl/:name` | HCL content (normalized) | `/sys/policies/acl/:name` |
+| `auth_role` | `/auth/:path/role/:name` | Config fields | `/auth/:path/role/:name` |
+| `kv2_secret` | `/:mount/data/:path` | Data dict | `/:mount/data/:path` |
+| `namespace` | `/sys/namespaces/:path` | Namespace exists | `/sys/namespaces/:path` |
+| `identity_entity` | `/identity/entity/name/:name` | Policies, metadata, aliases | `/identity/entity` + `/identity/entity-alias` |
+| `identity_group` | `/identity/group/name/:name` | Policies, members/aliases, metadata | `/identity/group` + `/identity/group-alias` |
+
+If the API returns an error, the module fails with a clear message. Tokens and secret data never show up in logs or output.
+
+## Roadmap
+
+Things I'd like to add:
+
+- `bao_status` -- check seal/init state
+- `bao_transit` -- encrypt, decrypt, rewrap
+- `bao_pki` -- issue and revoke certificates
+- Integration tests with `ansible-test`
+- Publish to Galaxy
+
+## License
+
+MIT

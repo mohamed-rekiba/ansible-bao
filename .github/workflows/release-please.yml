@@ -1,0 +1,57 @@
+---
+name: Release Please
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-24.04
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@v4.4.0
+        id: release
+        with:
+          release-type: simple
+          extra-files: |
+            galaxy.yml
+            pyproject.toml
+
+  build:
+    name: Build & Upload Collection
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v7.6.0
+        with:
+          python-version: "3.13"
+
+      - name: Install ansible-core
+        run: uv pip install --system ansible-core
+
+      - name: Build collection
+        run: ansible-galaxy collection build --force
+
+      - name: Upload to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          versioned="$(find . -maxdepth 1 -type f -name 'mrekiba-bao-*.tar.gz' ! -name 'mrekiba-bao-latest.tar.gz' | head -n1)"
+          if [[ -z "${versioned}" ]]; then
+            echo "No collection tarball found after build" >&2
+            exit 1
+          fi
+          cp "${versioned}" mrekiba-bao-latest.tar.gz
+          gh release upload "${{ needs.release-please.outputs.tag_name }}" "${versioned}" mrekiba-bao-latest.tar.gz
+          gh release edit "${{ needs.release-please.outputs.tag_name }}" --latest

@@ -1,0 +1,7 @@
+---
+version: 3
+
+dependencies:
+  python_interpreter:
+    package_system: python3.12
+  python: meta/requirements.txt

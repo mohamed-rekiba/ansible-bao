@@ -1,0 +1,27 @@
+---
+namespace: mrekiba
+name: bao
+version: 1.0.0 # x-release-please-version
+readme: README.md
+authors:
+  - Mohamed Rekiba
+description: Ansible collection for managing OpenBao secrets, auth methods, policies, and roles via the HTTP API.
+license:
+  - MIT
+license_file: LICENSE
+tags:
+  - openbao
+  - vault
+  - secrets
+  - security
+repository: https://github.com/mohamed-rekiba/ansible-bao
+documentation: https://github.com/mohamed-rekiba/ansible-bao
+homepage: https://github.com/mohamed-rekiba/ansible-bao
+issues: https://github.com/mohamed-rekiba/ansible-bao/issues
+build_ignore:
+  - docs
+  - tests
+  - .github
+  - .gitignore
+  - .pre-commit-config.yaml
+  - Makefile
