@@ -39,7 +39,7 @@ ansible-galaxy collection install \
 pip install hvac>=2.4.0
 ```
 
-Each release also includes the versioned `mrekiba-bao-x.y.z.tar.gz` if you want to pin a specific build -- grab that asset’s URL from the [Releases](https://github.com/mohamed-rekiba/ansible-bao/releases) page.
+Each release also includes the versioned `mrekiba-bao-x.y.z.tar.gz` if you want to pin a specific build -- grab that asset's URL from the [Releases](https://github.com/mohamed-rekiba/ansible-bao/releases) page.
 
 Or build and install locally:
 
