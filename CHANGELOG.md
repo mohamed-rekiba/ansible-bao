@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0](https://github.com/mohamed-rekiba/ansible-bao/compare/v1.1.0...v1.2.0) (2026-03-23)
+
+
+### Features
+
+* **auth_method:** add tune parameter for mount settings ([6498a0c](https://github.com/mohamed-rekiba/ansible-bao/commit/6498a0ce54d08f260bc5c9f2c6a16d598e2e39f4))
+
 ## [1.1.0](https://github.com/mohamed-rekiba/ansible-bao/compare/v1.0.0...v1.1.0) (2026-03-22)
 
 
