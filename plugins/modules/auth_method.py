@@ -8,11 +8,12 @@ from __future__ import annotations
 DOCUMENTATION = r"""
 ---
 module: auth_method
-short_description: Enable, configure, or disable an OpenBao auth method.
+short_description: Enable, configure, tune, or disable an OpenBao auth method.
 description:
   - Enable or disable an authentication method in OpenBao.
   - Optionally apply configuration after enabling.
-  - Idempotent -- skips enable if already present, applies config only when changed.
+  - Optionally tune mount settings (listing_visibility, description, lease TTLs).
+  - Idempotent -- skips enable if already present, applies config/tune only when changed.
 version_added: "1.0.0"
 options:
   path:
@@ -30,8 +31,21 @@ options:
     required: false
     type: dict
     default: {}
+  tune:
+    description: >-
+      Mount tune parameters (written to sys/auth/:path/tune).
+      Common keys: C(listing_visibility) (unauth or hidden),
+      C(description), C(default_lease_ttl), C(max_lease_ttl),
+      C(token_type), C(passthrough_request_headers),
+      C(allowed_response_headers).
+      Only applied when state is present.
+    required: false
+    type: dict
+    default: {}
   description:
-    description: Human-readable description of the auth method.
+    description: >-
+      Human-readable description of the auth method. Applied during initial
+      enable and also via tune on subsequent runs if it differs.
     required: false
     type: str
     default: ""
@@ -86,6 +100,22 @@ EXAMPLES = r"""
       userdn: ou=Users,dc=example,dc=com
     state: present
 
+- name: Enable OIDC auth with tune (visible on login page)
+  mrekiba.bao.auth_method:
+    bao_addr: https://bao.example.com:8200
+    bao_token: "{{ root_token }}"
+    path: homelap
+    type: oidc
+    description: "Homelab SSO (Keycloak)"
+    config:
+      oidc_discovery_url: https://auth.example.com/realms/homelab
+      oidc_client_id: openbao
+      oidc_client_secret: "{{ client_secret }}"
+      default_role: default
+    tune:
+      listing_visibility: unauth
+    state: present
+
 - name: Disable an auth method
   mrekiba.bao.auth_method:
     bao_addr: https://bao.example.com:8200
@@ -106,6 +136,10 @@ auth_path:
   returned: always
 config_changed:
   description: Whether the configuration was updated.
+  type: bool
+  returned: when state is present
+tune_changed:
+  description: Whether the tune settings were updated.
   type: bool
   returned: when state is present
 """
@@ -130,6 +164,22 @@ def _read_config(client, path: str) -> dict:
         return {}
 
 
+def _read_tune(client, path: str) -> dict:
+    """Read auth method tune settings, return empty dict on error."""
+    try:
+        resp = client.adapter.get(f"/v1/sys/auth/{path}/tune")
+        if isinstance(resp, dict):
+            return resp.get("data", {})
+        return resp.json().get("data", {})
+    except Exception:
+        return {}
+
+
+def _write_tune(client, path: str, tune: dict) -> None:
+    """Write auth method tune settings."""
+    client.adapter.post(f"/v1/sys/auth/{path}/tune", json=tune)
+
+
 def _config_differs(current: dict, desired: dict) -> bool:
     """Check if any desired key differs from current config."""
     if not desired:
@@ -149,6 +199,7 @@ def run_module():
         path=dict(type="str", required=True),
         type=dict(type="str", required=True),
         config=dict(type="dict", required=False, default={}),
+        tune=dict(type="dict", required=False, default={}),
         description=dict(type="str", required=False, default=""),
         state=dict(type="str", choices=["present", "absent"], default="present"),
         **BAO_COMMON_ARGS,
@@ -160,11 +211,12 @@ def run_module():
     path = module.params["path"].strip("/")
     auth_type = module.params["type"]
     config = module.params["config"]
+    tune = module.params["tune"]
     description = module.params["description"]
     state = module.params["state"]
     key = _auth_key(path)
 
-    result = dict(changed=False, auth_path=path, config_changed=False)
+    result = dict(changed=False, auth_path=path, config_changed=False, tune_changed=False)
 
     try:
         auth_methods = client.sys.list_auth_methods()
@@ -210,6 +262,23 @@ def run_module():
                         client.adapter.post(f"/v1/auth/{path}/config", json=config)
                     except hvac.exceptions.VaultError as exc:
                         module.fail_json(msg=f"Failed to configure auth method: {exc}")
+
+        # Merge description into tune so it's applied via the tune API.
+        # This ensures description updates work on already-existing methods.
+        desired_tune = dict(tune) if tune else {}
+        if description and "description" not in desired_tune:
+            desired_tune["description"] = description
+
+        if desired_tune:
+            current_tune = {} if module.check_mode and not existing else _read_tune(client, path)
+            if _config_differs(current_tune, desired_tune):
+                result["changed"] = True
+                result["tune_changed"] = True
+                if not module.check_mode:
+                    try:
+                        _write_tune(client, path, desired_tune)
+                    except hvac.exceptions.VaultError as exc:
+                        module.fail_json(msg=f"Failed to tune auth method: {exc}")
     else:
         if existing:
             result["changed"] = True
