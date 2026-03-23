@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0](https://github.com/mohamed-rekiba/ansible-bao/compare/v1.2.0...v1.3.0) (2026-03-23)
+
+
+### Features
+
+* **kv2_secret:** add custom_metadata support for ESO tag-based discovery ([3495780](https://github.com/mohamed-rekiba/ansible-bao/commit/3495780c3d9de071c1f26b72db681faf14136c50))
+
 ## [1.2.0](https://github.com/mohamed-rekiba/ansible-bao/compare/v1.1.0...v1.2.0) (2026-03-23)
 
 
