@@ -12,6 +12,7 @@ short_description: Write, read, or delete an OpenBao KV v2 secret.
 description:
   - Manage secrets in an OpenBao KV version 2 secrets engine.
   - Idempotent -- compares secret data before creating a new version.
+  - Optionally sets custom_metadata on the secret (useful for ESO tag-based discovery).
   - Secret data is never logged or included in module output.
 version_added: "1.0.0"
 options:
@@ -29,6 +30,15 @@ options:
       This parameter is marked no_log to prevent secret leakage.
     required: false
     type: dict
+  custom_metadata:
+    description: >-
+      A dict of arbitrary string-to-string key/value pairs stored as
+      custom metadata on the secret. Useful for tagging secrets for
+      External Secrets Operator C(dataFrom.find.tags) discovery.
+      Only applied when I(state=present). Requires Vault/OpenBao 1.9+.
+    required: false
+    type: dict
+    version_added: "1.3.0"
   state:
     description: Whether the secret should be present or absent.
     choices: [present, absent]
@@ -73,6 +83,19 @@ EXAMPLES = r"""
       db_password: "{{ lookup('env', 'DB_PASSWORD') }}"
     state: present
 
+- name: Write a secret with custom metadata tags
+  mrekiba.bao.kv2_secret:
+    bao_addr: https://bao.example.com:8200
+    bao_token: "{{ root_token }}"
+    mount: kvv2/infra/myapp
+    path: creds
+    data:
+      cookie-secret: "{{ cookie_secret }}"
+    custom_metadata:
+      component: myapp
+      secret-type: cookie
+    state: present
+
 - name: Delete all versions of a secret
   mrekiba.bao.kv2_secret:
     bao_addr: https://bao.example.com:8200
@@ -84,7 +107,7 @@ EXAMPLES = r"""
 
 RETURN = r"""
 changed:
-  description: Whether the secret was modified.
+  description: Whether the secret or its metadata was modified.
   type: bool
   returned: always
 path:
@@ -94,7 +117,11 @@ path:
 version:
   description: The secret version after the operation (when creating/updating).
   type: int
-  returned: when state is present and changed
+  returned: when state is present and data changed
+metadata_changed:
+  description: Whether custom_metadata was updated.
+  type: bool
+  returned: when custom_metadata is provided
 """
 
 import hvac.exceptions
@@ -119,11 +146,77 @@ def _read_secret(client, mount: str, path: str) -> dict | None:
         raise
 
 
+def _read_custom_metadata(client, mount: str, path: str) -> dict | None:
+    """Read current custom_metadata. Returns None if the secret doesn't exist."""
+    try:
+        resp = client.secrets.kv.v2.read_secret_metadata(
+            path=path,
+            mount_point=mount,
+        )
+        return resp.get("data", {}).get("custom_metadata") or {}
+    except hvac.exceptions.InvalidPath:
+        return None
+    except hvac.exceptions.VaultError as exc:
+        if "404" in str(exc):
+            return None
+        raise
+
+
+def _upsert_secret(client, module, mount: str, path: str, data: dict) -> dict:
+    """Compare and write secret data. Returns {"changed": bool, "version": int | None}."""
+    try:
+        current = _read_secret(client, mount, path)
+    except hvac.exceptions.VaultError as exc:
+        module.fail_json(msg=f"Failed to read secret at '{mount}/{path}': {exc}")
+
+    if current is not None and current == data:
+        return {"changed": False, "version": None}
+
+    if module.check_mode:
+        return {"changed": True, "version": None}
+
+    try:
+        resp = client.secrets.kv.v2.create_or_update_secret(
+            path=path,
+            secret=data,
+            mount_point=mount,
+        )
+        version = resp.get("data", {}).get("version")
+        return {"changed": True, "version": version}
+    except hvac.exceptions.VaultError as exc:
+        module.fail_json(msg=f"Failed to write secret at '{mount}/{path}': {exc}")
+
+
+def _upsert_custom_metadata(client, module, mount: str, path: str, custom_metadata: dict) -> dict:
+    """Compare and write custom_metadata. Returns {"changed": bool}."""
+    try:
+        current = _read_custom_metadata(client, mount, path)
+    except hvac.exceptions.VaultError as exc:
+        module.fail_json(msg=f"Failed to read metadata at '{mount}/{path}': {exc}")
+
+    if current == custom_metadata:
+        return {"changed": False}
+
+    if module.check_mode:
+        return {"changed": True}
+
+    try:
+        client.secrets.kv.v2.update_metadata(
+            path=path,
+            mount_point=mount,
+            custom_metadata=custom_metadata,
+        )
+        return {"changed": True}
+    except hvac.exceptions.VaultError as exc:
+        module.fail_json(msg=f"Failed to update metadata at '{mount}/{path}': {exc}")
+
+
 def run_module():
     arg_spec = dict(
         mount=dict(type="str", required=True),
         path=dict(type="str", required=True),
         data=dict(type="dict", required=False, default=None, no_log=True),
+        custom_metadata=dict(type="dict", required=False, default=None),
         state=dict(type="str", choices=["present", "absent"], default="present"),
         **BAO_COMMON_ARGS,
     )
@@ -138,42 +231,34 @@ def run_module():
     mount = module.params["mount"].strip("/")
     path = module.params["path"].strip("/")
     data = module.params["data"]
+    custom_metadata = module.params["custom_metadata"]
     state = module.params["state"]
 
     result = dict(changed=False, path=f"{mount}/{path}")
 
-    try:
-        current_data = _read_secret(client, mount, path)
-    except hvac.exceptions.VaultError as exc:
-        module.fail_json(msg=f"Failed to read secret at '{mount}/{path}': {exc}")
-        return
-
     if state == "present":
-        if current_data is None or current_data != data:
+        secret_result = _upsert_secret(client, module, mount, path, data)
+        if secret_result["changed"]:
             result["changed"] = True
-            result["diff"] = dict(
-                before="(secret exists)" if current_data else "(no secret)",
-                after="(secret written)",
-            )
-            if not module.check_mode:
-                try:
-                    resp = client.secrets.kv.v2.create_or_update_secret(
-                        path=path,
-                        secret=data,
-                        mount_point=mount,
-                    )
-                    version = resp.get("data", {}).get("version")
-                    if version:
-                        result["version"] = version
-                except hvac.exceptions.VaultError as exc:
-                    module.fail_json(msg=f"Failed to write secret: {exc}")
+            result["diff"] = dict(before="(secret)", after="(secret written)")
+        if secret_result["version"]:
+            result["version"] = secret_result["version"]
+
+        if custom_metadata is not None:
+            meta_result = _upsert_custom_metadata(client, module, mount, path, custom_metadata)
+            result["metadata_changed"] = meta_result["changed"]
+            if meta_result["changed"]:
+                result["changed"] = True
     else:
-        if current_data is not None:
+        try:
+            current = _read_secret(client, mount, path)
+        except hvac.exceptions.VaultError as exc:
+            module.fail_json(msg=f"Failed to read secret at '{mount}/{path}': {exc}")
+            return
+
+        if current is not None:
             result["changed"] = True
-            result["diff"] = dict(
-                before="(secret exists)",
-                after="(deleted)",
-            )
+            result["diff"] = dict(before="(secret exists)", after="(deleted)")
             if not module.check_mode:
                 try:
                     client.secrets.kv.v2.delete_metadata_and_all_versions(
@@ -181,7 +266,7 @@ def run_module():
                         mount_point=mount,
                     )
                 except hvac.exceptions.VaultError as exc:
-                    module.fail_json(msg=f"Failed to delete secret: {exc}")
+                    module.fail_json(msg=f"Failed to delete secret at '{mount}/{path}': {exc}")
 
     module.exit_json(**result)
 
