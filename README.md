@@ -2,7 +2,7 @@
 
 Ansible collection for managing [OpenBao](https://openbao.org/) through its HTTP API.
 
-Eight modules that handle the most common OpenBao operations -- namespaces, secrets engines, auth methods, policies, roles, KV v2 secrets, identity entities, and identity groups. Everything is idempotent, supports `--check` and `--diff`, and never logs sensitive data.
+Nine modules that handle the most common OpenBao operations -- namespaces, secrets engines, auth methods, audit devices, policies, roles, KV v2 secrets, identity entities, and identity groups. Everything is idempotent, supports `--check` and `--diff`, and never logs sensitive data.
 
 Also works with HashiCorp Vault since the API is compatible.
 
@@ -58,6 +58,7 @@ If you use [Ansible Execution Environments](https://docs.ansible.com/automation-
 | `mrekiba.bao.namespace` | Create or delete a namespace (supports nesting) |
 | `mrekiba.bao.secrets_engine` | Enable or disable a secrets engine |
 | `mrekiba.bao.auth_method` | Enable, configure, or disable an auth method |
+| `mrekiba.bao.audit_device` | Enable or disable an audit device (file, syslog, socket) |
 | `mrekiba.bao.policy` | Manage ACL policies (inline HCL or from templates) |
 | `mrekiba.bao.auth_role` | Manage roles on any auth method |
 | `mrekiba.bao.kv2_secret` | Write or delete KV v2 secrets |
@@ -94,6 +95,24 @@ A typical playbook that sets up a KV engine, an auth method, a policy, and a rol
         type: kv
         options:
           version: "2"
+
+    - name: Enable file audit logging
+      mrekiba.bao.audit_device:
+        bao_addr: "{{ bao_addr }}"
+        bao_token: "{{ bao_token }}"
+        name: file
+        type: file
+        options:
+          file_path: /openbao/audit/audit.log
+
+    - name: Enable stdout audit for log aggregation
+      mrekiba.bao.audit_device:
+        bao_addr: "{{ bao_addr }}"
+        bao_token: "{{ bao_token }}"
+        name: stdout
+        type: file
+        options:
+          file_path: /dev/stdout
 
     - name: Enable AppRole auth
       mrekiba.bao.auth_method:
@@ -204,6 +223,7 @@ Here's what each module checks:
 |--------|-------|----------|--------|
 | `secrets_engine` | `/sys/mounts` | Mount exists with correct type | `/sys/mounts/:path` |
 | `auth_method` | `/sys/auth` | Mount + config | `/sys/auth/:path` |
+| `audit_device` | `/sys/audit` | Device exists at path | `/sys/audit/:name` |
 | `policy` | `/sys/policies/acl/:name` | HCL content (normalized) | `/sys/policies/acl/:name` |
 | `auth_role` | `/auth/:path/role/:name` | Config fields | `/auth/:path/role/:name` |
 | `kv2_secret` | `/:mount/data/:path` | Data dict | `/:mount/data/:path` |
@@ -220,6 +240,7 @@ Things I'd like to add:
 - `bao_status` -- check seal/init state
 - `bao_transit` -- encrypt, decrypt, rewrap
 - `bao_pki` -- issue and revoke certificates
+- `bao_audit_device` options diffing -- detect and update changed options on existing devices
 - Integration tests with `ansible-test`
 - Publish to Galaxy
 
