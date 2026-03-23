@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.3.0](https://github.com/mohamed-rekiba/ansible-bao/compare/v1.2.0...v1.3.0) (2026-03-23)
+
+
+### Features
+
+* **audit:** add audit_device module for managing OpenBao audit devices ([3660de4](https://github.com/mohamed-rekiba/ansible-bao/commit/3660de4187c9ba5ca8a5bee6619822a1ba0b6330))
+
 ## [1.2.0](https://github.com/mohamed-rekiba/ansible-bao/compare/v1.1.0...v1.2.0) (2026-03-23)
 
 
