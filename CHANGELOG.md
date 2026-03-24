@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.4.0](https://github.com/mohamed-rekiba/ansible-bao/compare/v1.3.0...v1.4.0) (2026-03-24)
+
+
+### Features
+
+* **modules:** add info modules for all resources ([40f2a9c](https://github.com/mohamed-rekiba/ansible-bao/commit/40f2a9c24711f98f6bbcf32411446d6285914f57))
+
 ## [1.3.0](https://github.com/mohamed-rekiba/ansible-bao/compare/v1.2.0...v1.3.0) (2026-03-23)
 
 
