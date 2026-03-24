@@ -62,7 +62,7 @@ Read-only. Return `exists` (bool) and resource data. Never modify state.
 |--------|------------|
 | `mrekiba.bao.namespace_info` | Read a namespace |
 | `mrekiba.bao.secrets_engine_info` | Read a secrets engine mount (type, accessor, options) |
-| `mrekiba.bao.auth_method_info` | Read an auth method (type, accessor, config, tune) |
+| `mrekiba.bao.auth_method_info` | Read an auth method (type, accessor, config, tune, roles) |
 | `mrekiba.bao.policy_info` | Read an ACL policy (HCL content) |
 | `mrekiba.bao.auth_role_info` | Read a role on an auth method |
 | `mrekiba.bao.kv2_secret_info` | Read KV v2 secret metadata (optionally data with `include_data`) |

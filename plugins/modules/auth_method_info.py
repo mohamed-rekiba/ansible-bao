@@ -11,7 +11,8 @@ module: auth_method_info
 short_description: Read an OpenBao auth method.
 description:
   - Return information about an authentication method in OpenBao,
-    including its configuration and tune settings.
+    including its configuration, tune settings, and the list of roles
+    configured on it.
   - Read-only -- never modifies state.
 version_added: "1.4.0"
 options:
@@ -54,15 +55,8 @@ EXAMPLES = r"""
 
 - name: Show auth method details
   ansible.builtin.debug:
-    msg: "Type: {{ auth.type }}, Accessor: {{ auth.accessor }}"
+    msg: "Type: {{ auth.type }}, Accessor: {{ auth.accessor }}, Roles: {{ auth.roles }}"
   when: auth.exists
-
-- name: Read LDAP auth config and tune
-  mrekiba.bao.auth_method_info:
-    bao_addr: https://bao.example.com:8200
-    bao_token: "{{ root_token }}"
-    path: ldap
-  register: ldap_auth
 """
 
 RETURN = r"""
@@ -93,6 +87,11 @@ config:
 tune:
   description: Mount tune settings from C(/sys/auth/:path/tune).
   type: dict
+  returned: when exists
+roles:
+  description: List of role names configured on this auth method.
+  type: list
+  elements: str
   returned: when exists
 data:
   description: Raw mount data from the API (empty dict when the mount does not exist).
@@ -127,6 +126,17 @@ def _read_tune(client, path: str) -> dict:
         return {}
 
 
+def _list_roles(client, path: str) -> list[str]:
+    """List role names on an auth method. Returns empty list when none exist."""
+    try:
+        resp = client.adapter.list(f"/v1/auth/{path}/role")
+        if isinstance(resp, dict):
+            return resp.get("data", {}).get("keys", [])
+        return resp.json().get("data", {}).get("keys", [])
+    except Exception:
+        return []
+
+
 def run_module():
     arg_spec = dict(
         path=dict(type="str", required=True),
@@ -159,6 +169,7 @@ def run_module():
         result["description"] = existing.get("description", "")
         result["config"] = _read_config(client, path)
         result["tune"] = _read_tune(client, path)
+        result["roles"] = _list_roles(client, path)
 
     module.exit_json(**result)
 
