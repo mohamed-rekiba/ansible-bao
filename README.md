@@ -1,10 +1,8 @@
 # mrekiba.bao
 
-Ansible collection for managing [OpenBao](https://openbao.org/) through its HTTP API.
+Ansible collection for managing [OpenBao](https://openbao.org/) through its HTTP API. Also works with HashiCorp Vault since the API is compatible.
 
-Eight modules that handle the most common OpenBao operations -- namespaces, secrets engines, auth methods, policies, roles, KV v2 secrets, identity entities, and identity groups. Everything is idempotent, supports `--check` and `--diff`, and never logs sensitive data.
-
-Also works with HashiCorp Vault since the API is compatible.
+Eight action modules manage resources (create, update, delete) and eight info modules read them. Everything is idempotent, supports `--check` and `--diff`, and never logs sensitive data.
 
 ## Requirements
 
@@ -15,7 +13,15 @@ Also works with HashiCorp Vault since the API is compatible.
 
 ## Install
 
-Add it to your `requirements.yml`:
+From the latest GitHub Release:
+
+```bash
+ansible-galaxy collection install \
+  https://github.com/mohamed-rekiba/ansible-bao/releases/latest/download/mrekiba-bao-latest.tar.gz
+pip install hvac>=2.4.0
+```
+
+Or via `requirements.yml`:
 
 ```yaml
 collections:
@@ -24,34 +30,18 @@ collections:
     version: main
 ```
 
-Then install the collection and its Python dependency:
-
 ```bash
 ansible-galaxy collection install -r requirements.yml
 pip install -r ~/.ansible/collections/ansible_collections/mrekiba/bao/meta/requirements.txt
 ```
 
-Or install the tarball from the **latest** GitHub Release (stable URL; CI uploads `mrekiba-bao-latest.tar.gz` on every release):
-
-```bash
-ansible-galaxy collection install \
-  https://github.com/mohamed-rekiba/ansible-bao/releases/latest/download/mrekiba-bao-latest.tar.gz
-pip install hvac>=2.4.0
-```
-
-Each release also includes the versioned `mrekiba-bao-x.y.z.tar.gz` if you want to pin a specific build -- grab that asset's URL from the [Releases](https://github.com/mohamed-rekiba/ansible-bao/releases) page.
-
-Or build and install locally:
-
-```bash
-ansible-galaxy collection build
-ansible-galaxy collection install mrekiba-bao-*.tar.gz
-pip install hvac>=2.4.0
-```
-
-If you use [Ansible Execution Environments](https://docs.ansible.com/automation-controller/latest/html/userguide/execution_environments.html), `ansible-builder` picks up the Python dependency automatically from `meta/execution-environment.yml`.
+Pinned releases are also available as `mrekiba-bao-x.y.z.tar.gz` on the [Releases](https://github.com/mohamed-rekiba/ansible-bao/releases) page. For [Execution Environments](https://docs.ansible.com/automation-controller/latest/html/userguide/execution_environments.html), `ansible-builder` picks up the Python dependency from `meta/execution-environment.yml`.
 
 ## Modules
+
+### Action modules
+
+Manage resources with `state: present` or `state: absent`.
 
 | Module | Description |
 |--------|------------|
@@ -64,7 +54,24 @@ If you use [Ansible Execution Environments](https://docs.ansible.com/automation-
 | `mrekiba.bao.identity_entity` | Manage identity entities and their aliases |
 | `mrekiba.bao.identity_group` | Manage identity groups (internal/external) and their aliases |
 
-All modules share these connection parameters:
+### Info modules
+
+Read-only. Return `exists` (bool) and resource data. Never modify state.
+
+| Module | Description |
+|--------|------------|
+| `mrekiba.bao.namespace_info` | Read a namespace |
+| `mrekiba.bao.secrets_engine_info` | Read a secrets engine mount (type, accessor, options) |
+| `mrekiba.bao.auth_method_info` | Read an auth method (type, accessor, config, tune) |
+| `mrekiba.bao.policy_info` | Read an ACL policy (HCL content) |
+| `mrekiba.bao.auth_role_info` | Read a role on an auth method |
+| `mrekiba.bao.kv2_secret_info` | Read KV v2 secret metadata (optionally data with `include_data`) |
+| `mrekiba.bao.identity_entity_info` | Read an identity entity (policies, metadata, aliases) |
+| `mrekiba.bao.identity_group_info` | Read an identity group (type, policies, members/aliases) |
+
+### Connection parameters
+
+All modules share these:
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
@@ -74,9 +81,9 @@ All modules share these connection parameters:
 | `bao_ca_cert` | path | no | -- | CA cert for TLS verification |
 | `bao_skip_verify` | bool | no | false | Skip TLS verification |
 
-## Example
+## Examples
 
-A typical playbook that sets up a KV engine, an auth method, a policy, and a role:
+### Setting up a full stack
 
 ```yaml
 - name: Set up OpenBao
@@ -154,20 +161,7 @@ A typical playbook that sets up a KV engine, an auth method, a policy, and a rol
           - my-app
 ```
 
-Policies can also come from Jinja2 templates:
-
-```yaml
-- name: Create policy from template
-  mrekiba.bao.policy:
-    bao_addr: "{{ bao_addr }}"
-    bao_token: "{{ bao_token }}"
-    name: app-read
-    content: "{{ lookup('template', 'policies/app-read.hcl.j2') }}"
-```
-
 ### Namespaces
-
-Create isolated environments and scope operations to them:
 
 ```yaml
 - name: Create a team namespace
@@ -187,35 +181,69 @@ Create isolated environments and scope operations to them:
       version: "2"
 ```
 
-Every module accepts `bao_namespace` to scope API calls to a specific namespace.
+### Reading resources
+
+```yaml
+- name: Check if the KV engine is mounted
+  mrekiba.bao.secrets_engine_info:
+    bao_addr: "{{ bao_addr }}"
+    bao_token: "{{ bao_token }}"
+    path: secret
+  register: engine
+
+- name: Enable KV only if missing
+  mrekiba.bao.secrets_engine:
+    bao_addr: "{{ bao_addr }}"
+    bao_token: "{{ bao_token }}"
+    path: secret
+    type: kv
+    options:
+      version: "2"
+  when: not engine.exists
+
+- name: Check if a secret exists (metadata only)
+  mrekiba.bao.kv2_secret_info:
+    bao_addr: "{{ bao_addr }}"
+    bao_token: "{{ bao_token }}"
+    mount: secret
+    path: myapp/config
+  register: secret
+
+- name: Read the secret data when needed
+  mrekiba.bao.kv2_secret_info:
+    bao_addr: "{{ bao_addr }}"
+    bao_token: "{{ bao_token }}"
+    mount: secret
+    path: myapp/config
+    include_data: true
+  register: secret_data
+  no_log: true
+  when: secret.exists
+```
+
+### Policies from Jinja2 templates
+
+```yaml
+- name: Create policy from template
+  mrekiba.bao.policy:
+    bao_addr: "{{ bao_addr }}"
+    bao_token: "{{ bao_token }}"
+    name: app-read
+    content: "{{ lookup('template', 'policies/app-read.hcl.j2') }}"
+```
 
 ## How it works
 
-Every module does the same thing:
+Every action module follows the same pattern:
 
-1. Connect to OpenBao using `hvac`
-2. Read the current state
-3. Compare it to what you asked for
-4. Only make changes if something is different
+1. Connect to OpenBao via `hvac`
+2. Read current state from the API
+3. Compare to desired state
+4. Write only if something differs
 
-Here's what each module checks:
-
-| Module | Reads | Compares | Writes |
-|--------|-------|----------|--------|
-| `secrets_engine` | `/sys/mounts` | Mount exists with correct type | `/sys/mounts/:path` |
-| `auth_method` | `/sys/auth` | Mount + config | `/sys/auth/:path` |
-| `policy` | `/sys/policies/acl/:name` | HCL content (normalized) | `/sys/policies/acl/:name` |
-| `auth_role` | `/auth/:path/role/:name` | Config fields | `/auth/:path/role/:name` |
-| `kv2_secret` | `/:mount/data/:path` | Data dict | `/:mount/data/:path` |
-| `namespace` | `/sys/namespaces/:path` | Namespace exists | `/sys/namespaces/:path` |
-| `identity_entity` | `/identity/entity/name/:name` | Policies, metadata, aliases | `/identity/entity` + `/identity/entity-alias` |
-| `identity_group` | `/identity/group/name/:name` | Policies, members/aliases, metadata | `/identity/group` + `/identity/group-alias` |
-
-If the API returns an error, the module fails with a clear message. Tokens and secret data never show up in logs or output.
+Info modules do steps 1-2 and return the result. All modules fail with a clear message on API errors. Tokens and secret data never appear in logs or output.
 
 ## Roadmap
-
-Things I'd like to add:
 
 - `bao_status` -- check seal/init state
 - `bao_transit` -- encrypt, decrypt, rewrap
