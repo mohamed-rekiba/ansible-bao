@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.6.0](https://github.com/mohamed-rekiba/ansible-bao/compare/v1.5.0...v1.6.0) (2026-03-24)
+
+
+### Features
+
+* **modules:** add bao_status health check module ([0ee5738](https://github.com/mohamed-rekiba/ansible-bao/commit/0ee57382c4ceded4632920eb11b97f745864dc2f))
+
 ## [1.5.0](https://github.com/mohamed-rekiba/ansible-bao/compare/v1.4.0...v1.5.0) (2026-03-24)
 
 
