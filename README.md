@@ -54,6 +54,12 @@ Manage resources with `state: present` or `state: absent`.
 | `mrekiba.bao.identity_entity` | Manage identity entities and their aliases |
 | `mrekiba.bao.identity_group` | Manage identity groups (internal/external) and their aliases |
 
+### Status module
+
+| Module | Description |
+|--------|------------|
+| `mrekiba.bao.bao_status` | Check health, seal, and init status (no token required) |
+
 ### Info modules
 
 Read-only. Return `exists` (bool) and resource data. Never modify state.
@@ -82,6 +88,18 @@ All modules share these:
 | `bao_skip_verify` | bool | no | false | Skip TLS verification |
 
 ## Examples
+
+### Waiting for OpenBao
+
+```yaml
+- name: Wait for OpenBao to be reachable and unsealed
+  mrekiba.bao.bao_status:
+    bao_addr: "{{ bao_addr }}"
+  register: bao
+  until: bao.reachable and not bao.sealed
+  retries: 30
+  delay: 5
+```
 
 ### Setting up a full stack
 
@@ -245,7 +263,6 @@ Info modules do steps 1-2 and return the result. All modules fail with a clear m
 
 ## Roadmap
 
-- `bao_status` -- check seal/init state
 - `bao_transit` -- encrypt, decrypt, rewrap
 - `bao_pki` -- issue and revoke certificates
 - Integration tests with `ansible-test`
