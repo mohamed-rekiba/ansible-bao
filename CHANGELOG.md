@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.5.0](https://github.com/mohamed-rekiba/ansible-bao/compare/v1.4.0...v1.5.0) (2026-03-24)
+
+
+### Features
+
+* **auth_method_info:** return list of roles ([e6bdb04](https://github.com/mohamed-rekiba/ansible-bao/commit/e6bdb0458dace7a99c3a7a16d10e110b8a6db313))
+
 ## [1.4.0](https://github.com/mohamed-rekiba/ansible-bao/compare/v1.3.0...v1.4.0) (2026-03-24)
 
 
